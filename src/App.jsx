@@ -5,7 +5,7 @@ import {
   PoseLandmarker,
 } from "@mediapipe/tasks-vision";
 
-const SOCKET_URL = "http://147.93.153.186";
+const SOCKET_URL = "https://multimodal.duckdns.org";
 
 
 // Match your Python: landmarks 11..23 inclusive (13 points)
