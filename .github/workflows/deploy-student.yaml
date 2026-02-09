@@ -1,0 +1,29 @@
+name: Deploy student service 
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted # Or your specific custom labels
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify 'build' output directory exists in repo
+        run: ls -la build
+
+      - name: Clean existing /var/www/multimodal-student/html and deploy new build
+        # Now running as the runner_username, which owns the directory
+        run: |
+          mkdir -p /var/www/multimodal-student/html/ # No sudo needed if runner_username owns /var/www/multimodal-student
+          rm -rf /var/www/multimodal-student/html/*
+          cp -r build/* /var/www/multimodal-student/html/
+        working-directory: ${{ github.workspace }}
+
+      - name: Reload Nginx
+        # Sudo is STILL required for systemctl reload nginx
+        run: sudo systemctl reload nginx
