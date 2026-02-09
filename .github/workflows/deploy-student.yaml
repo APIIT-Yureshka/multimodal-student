@@ -13,6 +13,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: run npm build
+        run: npm install && npm run build
+        working-directory: ${{ github.workspace }}
+
       - name: Verify 'build' output directory exists in repo
         run: ls -la build
 
