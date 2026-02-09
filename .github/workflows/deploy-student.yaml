@@ -1,4 +1,4 @@
-name: Deploy student service 
+name: Deploy student service
 
 on:
   push:
@@ -7,27 +7,31 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted # Or your specific custom labels
+    runs-on: self-hosted
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: run npm build
-        run: npm install && npm run build
+      - name: Use clean install + build with correct base
+        run: |
+          npm ci
+          npm run build -- --base=/student/
         working-directory: ${{ github.workspace }}
 
-      - name: Verify 'build' output directory exists in repo
+      - name: Verify dist exists
         run: ls -la dist
 
-      - name: Clean existing /var/www/multimodal-student/html and deploy new build
-        # Now running as the runner_username, which owns the directory
+      - name: Check built index.html uses /student/ base
         run: |
-          mkdir -p /var/www/multimodal-student/html/ # No sudo needed if runner_username owns /var/www/multimodal-student
+          grep -nE '(src="/assets|href="/assets)' dist/index.html && (echo "ERROR: still using /assets (wrong base)"; exit 1) || true
+          grep -nE '(src="/student/|href="/student/|base href="/student/")' dist/index.html || (echo "ERROR: missing /student/ in built index.html"; exit 1)
+
+      - name: Deploy dist to Nginx web root
+        run: |
+          mkdir -p /var/www/multimodal-student/html/
           rm -rf /var/www/multimodal-student/html/*
           cp -r dist/* /var/www/multimodal-student/html/
-        working-directory: ${{ github.workspace }}
 
       - name: Reload Nginx
-        # Sudo is STILL required for systemctl reload nginx
         run: sudo systemctl reload nginx
