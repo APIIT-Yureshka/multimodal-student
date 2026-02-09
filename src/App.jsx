@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
-import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
+import {
+  FilesetResolver,
+  PoseLandmarker,
+} from "@mediapipe/tasks-vision";
+
+const SOCKET_URL = "http://147.93.153.186/api";
+
 
 // Match your Python: landmarks 11..23 inclusive (13 points)
-const LANDMARK_IDX = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+const LANDMARK_IDX = [11,12,13,14,15,16,17,18,19,20,21,22,23];
 
 export default function App() {
   const [code, setCode] = useState("");
@@ -22,12 +28,7 @@ export default function App() {
 
   // ---------------- Socket connect / join ----------------
   const joinSession = () => {
-    // Use same origin, but force socket.io path to go through nginx /api proxy
-    socketRef.current = io({
-      path: "/api/socket.io",
-      transports: ["websocket", "polling"], // allow fallback
-      withCredentials: false,
-    });
+    socketRef.current = io(SOCKET_URL, { transports: ["websocket"] });
 
     socketRef.current.on("connect", () => {
       socketRef.current.emit("join_session", { code, role: "student" });
@@ -36,11 +37,6 @@ export default function App() {
 
     socketRef.current.on("connect_error", (err) => {
       console.error("Socket connect_error:", err);
-    });
-
-    socketRef.current.on("disconnect", (reason) => {
-      console.warn("Socket disconnected:", reason);
-      setConnected(false);
     });
   };
 
@@ -77,11 +73,14 @@ export default function App() {
 
   // ---------------- Pose feature extraction ----------------
   function compute52Features(landmarks) {
+    // landmarks: array of 33 pose landmarks with {x,y,z,visibility}
     const ls = landmarks;
 
+    // shoulders
     const L = ls[11];
     const R = ls[12];
 
+    // mid-shoulder and shoulder distance
     const midX = (L.x + R.x) / 2;
     const midY = (L.y + R.y) / 2;
     const midZ = (L.z + R.z) / 2;
@@ -91,6 +90,7 @@ export default function App() {
     const dz = L.z - R.z;
     const shoulderDist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
 
+    // Build 13 * 4 = 52 features: (x,y,z,visibility) normalized
     const feats = [];
     for (const idx of LANDMARK_IDX) {
       const p = ls[idx];
@@ -103,12 +103,16 @@ export default function App() {
   }
 
   async function initPose() {
+    // Load wasm assets
     const vision = await FilesetResolver.forVisionTasks(
+      // CDN-hosted mediapipe wasm assets
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
     );
 
+    // Load PoseLandmarker model
     poseRef.current = await PoseLandmarker.createFromOptions(vision, {
       baseOptions: {
+        // CDN-hosted pose model
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
       },
@@ -123,6 +127,7 @@ export default function App() {
     if (!poseRef.current || !videoRef.current || !socketRef.current) return;
 
     const nowMs = performance.now();
+    // Throttle pose calls (~10 FPS)
     if (nowMs - lastPoseTs.current < 100) {
       requestAnimationFrame(runPoseLoop);
       return;
@@ -134,6 +139,7 @@ export default function App() {
 
     if (poseLandmarks && poseLandmarks.length >= 24) {
       const feats = compute52Features(poseLandmarks);
+      // Safety check
       if (feats.length === 52) {
         socketRef.current.emit("pose_features", { code, features: feats });
       }
@@ -150,13 +156,16 @@ export default function App() {
     let mouseInterval = null;
 
     (async () => {
+      // Start camera
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
 
+      // Init pose
       await initPose();
 
-      frameInterval = setInterval(sendFrame, 300);
+      // Start loops
+      frameInterval = setInterval(sendFrame, 300); // ~3 FPS (FER)
       mouseInterval = setInterval(sendMouseHeartbeat, 1000);
 
       window.addEventListener("mousemove", markMouse);
@@ -169,16 +178,11 @@ export default function App() {
     return () => {
       if (frameInterval) clearInterval(frameInterval);
       if (mouseInterval) clearInterval(mouseInterval);
-
       window.removeEventListener("mousemove", markMouse);
       window.removeEventListener("mousedown", markMouse);
       window.removeEventListener("keydown", markMouse);
 
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
-
+      // Stop camera
       const stream = videoRef.current?.srcObject;
       if (stream && stream.getTracks) stream.getTracks().forEach((t) => t.stop());
     };
@@ -213,8 +217,8 @@ export default function App() {
       </div>
 
       <p style={{ marginTop: 10, opacity: 0.8 }}>
-        Keep your upper body visible. Pose will start feeding the model and the tutor should see
-        GRAY warmup → GREEN/RED.
+        Keep your upper body visible. Pose will start feeding the model and the
+        tutor should see GRAY warmup → GREEN/RED.
       </p>
     </div>
   );
