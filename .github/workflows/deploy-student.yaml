@@ -18,14 +18,14 @@ jobs:
         working-directory: ${{ github.workspace }}
 
       - name: Verify 'build' output directory exists in repo
-        run: ls -la build
+        run: ls -la dist
 
       - name: Clean existing /var/www/multimodal-student/html and deploy new build
         # Now running as the runner_username, which owns the directory
         run: |
           mkdir -p /var/www/multimodal-student/html/ # No sudo needed if runner_username owns /var/www/multimodal-student
           rm -rf /var/www/multimodal-student/html/*
-          cp -r build/* /var/www/multimodal-student/html/
+          cp -r dist/* /var/www/multimodal-student/html/
         working-directory: ${{ github.workspace }}
 
       - name: Reload Nginx
