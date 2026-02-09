@@ -28,7 +28,7 @@ export default function App() {
 
   // ---------------- Socket connect / join ----------------
   const joinSession = () => {
-    socketRef.current = io(SOCKET_URL, { transports: ["websocket"] });
+    socketRef.current = io(SOCKET_URL, { path: "/api/socket.io/", transports: ["websocket"] });
 
     socketRef.current.on("connect", () => {
       socketRef.current.emit("join_session", { code, role: "student" });
